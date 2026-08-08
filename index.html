@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Draw</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --bg:#14100f;
+    --panel:#1e1815;
+    --panel-2:#251d19;
+    --ember:#e0632e;
+    --gold:#d4a24c;
+    --text:#f2e9e0;
+    --muted:#9a8a7e;
+    --line:#33281f;
+    --good:#7fae6f;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 50% 0%, #241a15 0%, var(--bg) 55%);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    display:flex; flex-direction:column;
+    min-height:100vh;
+  }
+  header{
+    padding:18px 20px 10px;
+    text-align:center;
+  }
+  header .brand{
+    font-size:0.68rem;
+    letter-spacing:0.22em;
+    text-transform:uppercase;
+    color:var(--gold);
+    font-weight:600;
+  }
+  #playerBar{
+    display:flex; justify-content:center; gap:8px; margin-top:10px;
+  }
+  #playerBar button{
+    background:var(--panel);
+    border:1px solid var(--line);
+    color:var(--muted);
+    padding:6px 16px;
+    border-radius:999px;
+    font-size:0.85rem;
+    font-weight:600;
+  }
+  #playerBar button.active{
+    background:var(--ember);
+    color:#1a0f08;
+    border-color:var(--ember);
+  }
+  main{
+    flex:1;
+    max-width:480px;
+    width:100%;
+    margin:0 auto;
+    padding:10px 20px 100px;
+  }
+  .view{display:none;}
+  .view.active{display:block;}
+
+  /* ---- Draw view ---- */
+  .stage{
+    display:flex; flex-direction:column; align-items:center;
+    margin-top:18px;
+  }
+  .cardface{
+    width:100%;
+    max-width:340px;
+    min-height:220px;
+    border-radius:18px;
+    background:linear-gradient(155deg,var(--panel) 0%,var(--panel-2) 100%);
+    border:1px solid var(--line);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:28px 22px;
+    text-align:center;
+    box-shadow:0 18px 40px -20px rgba(0,0,0,0.6);
+  }
+  .cardface.empty{
+    color:var(--muted);
+    font-size:0.95rem;
+  }
+  .type-pill{
+    font-size:0.65rem;
+    letter-spacing:0.15em;
+    text-transform:uppercase;
+    font-weight:700;
+    padding:4px 12px;
+    border-radius:999px;
+    margin-bottom:16px;
+  }
+  .type-pill.dare{ background:rgba(224,99,46,0.18); color:var(--ember); }
+  .type-pill.photo{ background:rgba(212,162,76,0.18); color:var(--gold); }
+  .type-pill.hot_or_not{ background:rgba(127,174,111,0.18); color:var(--good); }
+
+  .cardface .cardtext{
+    font-size:1.15rem;
+    line-height:1.5;
+    font-weight:500;
+  }
+  .cardface .points{
+    margin-top:16px;
+    font-size:0.85rem;
+    color:var(--muted);
+  }
+  #drawBtn{
+    margin-top:24px;
+    width:100%;
+    max-width:340px;
+    padding:16px;
+    border-radius:14px;
+    border:none;
+    background:linear-gradient(135deg,var(--ember),#c94f1f);
+    color:#1a0f08;
+    font-size:1.05rem;
+    font-weight:800;
+    letter-spacing:0.02em;
+  }
+  #drawBtn:disabled{opacity:0.4;}
+  #completeBtn{
+    margin-top:14px;
+    width:100%;
+    max-width:340px;
+    padding:14px;
+    border-radius:14px;
+    border:1px solid var(--good);
+    background:transparent;
+    color:var(--good);
+    font-size:0.95rem;
+    font-weight:700;
+  }
+  .partner-box{
+    margin-top:26px;
+    width:100%;
+    max-width:340px;
+    padding:14px 16px;
+    border-radius:12px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    font-size:0.85rem;
+    color:var(--muted);
+  }
+  .partner-box b{color:var(--text);}
+
+  /* ---- Prize ---- */
+  .prize-box{
+    background:linear-gradient(155deg,var(--panel) 0%,var(--panel-2) 100%);
+    border:1px solid var(--gold);
+    border-radius:14px;
+    padding:18px;
+    margin-bottom:18px;
+    text-align:center;
+  }
+  .prize-box .label{
+    font-size:0.65rem; letter-spacing:0.15em; text-transform:uppercase;
+    color:var(--gold); font-weight:700; margin-bottom:8px;
+  }
+  .prize-box .text{ font-size:1.1rem; font-weight:600; }
+  .prize-actions{ display:flex; gap:8px; margin-top:12px; }
+  .prize-actions button{
+    flex:1; padding:10px; border-radius:10px; font-weight:700; font-size:0.85rem; border:none;
+  }
+  .btn-approve{ background:var(--good); color:#0f1a0e; }
+  .btn-decline{ background:#4a2e26; color:var(--text); }
+  .btn-draw{ background:var(--ember); color:#1a0f08; width:100%; padding:12px; border-radius:10px; border:none; font-weight:700; margin-top:6px; }
+  .suggest-row{ display:flex; gap:8px; margin-top:10px; }
+  .suggest-row input{
+    flex:1; padding:10px; border-radius:10px; border:1px solid var(--line);
+    background:var(--bg); color:var(--text); font-size:0.85rem;
+  }
+  .suggest-row button{
+    padding:10px 14px; border-radius:10px; border:none; background:var(--panel-2);
+    color:var(--gold); border:1px solid var(--gold); font-weight:700; font-size:0.8rem;
+  }
+
+  /* ---- Scores view ---- */
+  .score-row{
+    display:flex; justify-content:space-between; align-items:center;
+    padding:16px 18px;
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    margin-bottom:12px;
+  }
+  .score-row .name{font-weight:700; font-size:1.05rem;}
+  .score-row .pts{font-size:1.6rem; font-weight:800; color:var(--gold);}
+  .history-item{
+    display:flex; justify-content:space-between; gap:10px;
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+    font-size:0.85rem;
+  }
+  .history-item .htype{color:var(--muted); font-size:0.7rem; text-transform:uppercase; letter-spacing:0.08em;}
+
+  /* ---- nav ---- */
+  nav{
+    position:fixed; bottom:0; left:0; right:0;
+    background:rgba(20,16,15,0.95);
+    backdrop-filter:blur(10px);
+    border-top:1px solid var(--line);
+    display:flex;
+    padding:8px 10px calc(8px + env(safe-area-inset-bottom));
+    gap:6px;
+  }
+  nav button{
+    flex:1;
+    background:none; border:none;
+    color:var(--muted);
+    font-size:0.72rem;
+    font-weight:600;
+    padding:8px 4px;
+    border-radius:10px;
+  }
+  nav button.active{ color:var(--ember); background:rgba(224,99,46,0.1); }
+
+  /* ---- admin ---- */
+  .admin-section{
+    background:var(--panel);
+    border:1px solid var(--line);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:16px;
+  }
+  .admin-section h3{margin:0 0 10px; font-size:0.9rem; color:var(--gold);}
+  .admin-section label{display:block; font-size:0.75rem; color:var(--muted); margin:10px 0 4px;}
+  .admin-section input[type=file], .admin-section input[type=text], .admin-section input[type=password]{
+    width:100%; padding:10px; border-radius:8px; border:1px solid var(--line);
+    background:var(--bg); color:var(--text); font-size:0.9rem;
+  }
+  .admin-section button.action{
+    margin-top:10px; width:100%; padding:10px; border-radius:8px; border:none;
+    background:var(--ember); color:#1a0f08; font-weight:700; font-size:0.85rem;
+  }
+  .count-pill{font-size:0.75rem; color:var(--muted);}
+  #gearBtn{
+    background:none;border:none;color:var(--line);font-size:0.9rem;
+    display:block; margin:24px auto 0;
+  }
+  #pinGate{
+    max-width:280px; margin:60px auto; text-align:center;
+  }
+  .msg{font-size:0.8rem; margin-top:8px;}
+  .msg.ok{color:var(--good);}
+  .msg.err{color:var(--ember);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Draw</div>
+  <div id="playerBar">
+    <button data-p="Steve" class="active">Steve</button>
+    <button data-p="Vi">Vi</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- DRAW VIEW -->
+  <section id="view-draw" class="view active">
+    <div class="stage">
+      <div id="cardface" class="cardface empty">Tap Draw to pull a card</div>
+      <button id="drawBtn">Draw</button>
+      <button id="completeBtn" style="display:none;">Mark Complete</button>
+      <div id="partnerBox" class="partner-box" style="display:none;"></div>
+    </div>
+  </section>
+
+  <!-- SCORES VIEW -->
+  <section id="view-scores" class="view">
+    <div id="prizeArea"></div>
+    <div id="scoreRows"></div>
+    <h3 style="font-size:0.8rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin:24px 0 8px;">Recent</h3>
+    <div id="historyList"></div>
+  </section>
+
+  <!-- DECK (admin) -->
+  <section id="view-deck" class="view">
+    <div class="admin-section">
+      <h3>Dares <span class="count-pill" id="dareCount"></span></h3>
+      <label>Upload CSV — columns: text,type,points</label>
+      <input type="file" id="dareCsv" accept=".csv">
+      <button class="action" id="dareUploadBtn">Upload dares</button>
+      <button class="action" id="dareClearBtn" style="background:#5a3a2e;">Clear all dares</button>
+      <div class="msg" id="dareMsg"></div>
+    </div>
+    <div class="admin-section">
+      <h3>Photo Prompts <span class="count-pill" id="photoCount"></span></h3>
+      <label>Upload CSV — columns: text,target,tier</label>
+      <input type="file" id="photoCsv" accept=".csv">
+      <button class="action" id="photoUploadBtn">Upload photo prompts</button>
+      <button class="action" id="photoClearBtn" style="background:#5a3a2e;">Clear all photo prompts</button>
+      <div class="msg" id="photoMsg"></div>
+    </div>
+  </section>
+
+  <!-- SETTINGS (admin) -->
+  <section id="view-settings" class="view">
+    <div class="admin-section">
+      <h3>Adjust score</h3>
+      <label>Player</label>
+      <select id="adjPlayer" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);">
+        <option>Steve</option><option>Vi</option>
+      </select>
+      <label>New total</label>
+      <input type="text" id="adjScore" placeholder="e.g. 120">
+      <button class="action" id="adjBtn">Set score</button>
+      <div class="msg" id="adjMsg"></div>
+    </div>
+    <div class="admin-section">
+      <h3>Reset a player's draw pool</h3>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Forces the next draw to start a fresh cycle instead of waiting for the pool to empty naturally.</p>
+      <select id="resetPlayer" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);margin-bottom:8px;">
+        <option>Steve</option><option>Vi</option>
+      </select>
+      <button class="action" id="resetDaresBtn">Reset dare pool</button>
+      <button class="action" id="resetPhotosBtn" style="margin-top:8px;">Reset photo pool</button>
+      <div class="msg" id="resetMsg"></div>
+    </div>
+    <div class="admin-section">
+      <h3>Prize pool <span class="count-pill" id="prizeCount"></span></h3>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Standing list of rewards to pull from when either of you hits "Draw a prize." Write-in requests don't touch this list.</p>
+      <label>Add a prize</label>
+      <div class="suggest-row">
+        <input type="text" id="newPrizeInput" placeholder="e.g. Winner picks the restaurant">
+        <button id="addPrizeBtn">Add</button>
+      </div>
+      <div id="prizeListAdmin" style="margin-top:12px;"></div>
+    </div>
+    <div class="admin-section">
+      <h3>New week</h3>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Clears both scores, history, and this week's prize/request. The prize pool and card decks are untouched.</p>
+      <button class="action" id="resetWeekBtn" style="background:#5a3a2e;">Reset week</button>
+      <div class="msg" id="resetWeekMsg"></div>
+    </div>
+  </section>
+
+  <button id="gearBtn">⚙</button>
+</main>
+
+<nav>
+  <button data-v="draw" class="active">Draw</button>
+  <button data-v="scores">Scores</button>
+  <button data-v="deck" id="navDeck" style="display:none;">Deck</button>
+  <button data-v="settings" id="navSettings" style="display:none;">Settings</button>
+</nav>
+
+<script>
+// ============ CONFIG ============
+const SUPABASE_URL = "https://gmkjwoircmftdbxemekf.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_KEY_HERE"; // same anon key Daily Dare already used
+const ADMIN_PIN = "1313";
+const HOT_OR_NOT_TEXT = "Send something hot 🔥 — your call. When they've reacted, mark it complete.";
+const HOT_OR_NOT_POINTS = 20;
+const TIER_POINTS = {1:5, 2:10, 3:15, 4:20, 5:25};
+
+const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ============ STATE ============
+let currentPlayer = localStorage.getItem("player") || "Steve";
+let players = {}; // name -> row
+let weekState = {};
+
+// ============ HELPERS ============
+function otherPlayer(){ return currentPlayer === "Steve" ? "Vi" : "Steve"; }
+
+function mtCutoffISO(){
+  // Most recent 7am UTC (midnight Mountain Time) boundary
+  const now = new Date();
+  const cutoff = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 7, 0, 0));
+  if (now < cutoff) cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+  return cutoff.toISOString();
+}
+
+function parseCsv(text){
+  return text.trim().split("\n").slice(1).map(line=>{
+    const parts = [];
+    let cur = "", inQ = false;
+    for(let i=0;i<line.length;i++){
+      const c = line[i];
+      if(c === '"'){ inQ = !inQ; }
+      else if(c === ',' && !inQ){ parts.push(cur); cur=""; }
+      else { cur += c; }
+    }
+    parts.push(cur);
+    return parts.map(p=>p.trim());
+  }).filter(r=>r.length>1 && r[0]);
+}
+
+// ============ LOAD / EXPIRE ============
+async function loadPlayers(){
+  const {data} = await supabaseClient.from("players").select("*");
+  players = {};
+  (data||[]).forEach(p=>players[p.name]=p);
+  await expireIfNeeded(currentPlayer);
+  await expireIfNeeded(otherPlayer());
+}
+
+async function expireIfNeeded(name){
+  const p = players[name];
+  if(!p || !p.active_type) return;
+  if(new Date(p.card_drawn_at) < new Date(mtCutoffISO())){
+    await supabaseClient.from("players").update({
+      active_type:null, active_card_id:null, active_text:null,
+      active_points:null, card_drawn_at:null
+    }).eq("name", name);
+    p.active_type=null; p.active_card_id=null; p.active_text=null; p.active_points=null; p.card_drawn_at=null;
+  }
+}
+
+// ============ DRAW LOGIC ============
+async function drawCard(){
+  document.getElementById("drawBtn").disabled = true;
+  const type = ["dare","photo","hot_or_not"][Math.floor(Math.random()*3)];
+  let text, points, cardId=null;
+
+  if(type === "hot_or_not"){
+    text = HOT_OR_NOT_TEXT;
+    points = HOT_OR_NOT_POINTS;
+  } else if(type === "dare"){
+    const picked = await pickFromPool("dares", "drawn_dares", "dare_id", []);
+    if(!picked){ document.getElementById("drawBtn").disabled=false; return; }
+    text = picked.text; points = picked.points; cardId = picked.id;
+  } else {
+    const targets = currentPlayer === "Steve" ? ["his","communal"] : ["hers","communal"];
+    const picked = await pickFromPool("photo_prompts", "drawn_photo_prompts", "prompt_id", targets);
+    if(!picked){ document.getElementById("drawBtn").disabled=false; return; }
+    text = picked.text; points = TIER_POINTS[picked.tier] || 10; cardId = picked.id;
+  }
+
+  await supabaseClient.from("players").update({
+    active_type:type, active_card_id:cardId, active_text:text,
+    active_points:points, card_drawn_at:new Date().toISOString()
+  }).eq("name", currentPlayer);
+
+  players[currentPlayer] = {...players[currentPlayer], active_type:type, active_card_id:cardId, active_text:text, active_points:points, card_drawn_at:new Date().toISOString()};
+  renderDraw();
+}
+
+async function pickFromPool(table, drawnTable, drawnCol, targetFilter){
+  let query = supabaseClient.from(table).select("*");
+  if(targetFilter.length) query = query.in("target", targetFilter);
+  const {data: allCards} = await query;
+  if(!allCards || allCards.length === 0){
+    alert(`No cards in the ${table} deck yet. Add some in Deck settings.`);
+    return null;
+  }
+  const {data: drawn} = await supabaseClient.from(drawnTable).select(drawnCol).eq("player_name", currentPlayer);
+  const drawnIds = new Set((drawn||[]).map(r=>r[drawnCol]));
+  let available = allCards.filter(c=>!drawnIds.has(c.id));
+
+  if(available.length === 0){
+    // full cycle complete - reset pool for this player and start over
+    await supabaseClient.from(drawnTable).delete().eq("player_name", currentPlayer);
+    available = allCards;
+  }
+  const chosen = available[Math.floor(Math.random()*available.length)];
+  await supabaseClient.from(drawnTable).insert({player_name: currentPlayer, [drawnCol]: chosen.id});
+  return chosen;
+}
+
+async function completeCard(){
+  const p = players[currentPlayer];
+  if(!p || !p.active_type) return;
+  const newScore = (p.score||0) + p.active_points;
+
+  await supabaseClient.from("players").update({
+    score:newScore, active_type:null, active_card_id:null,
+    active_text:null, active_points:null, card_drawn_at:null
+  }).eq("name", currentPlayer);
+
+  await supabaseClient.from("history").insert({
+    player_name: currentPlayer, type: p.active_type, text: p.active_text, points: p.active_points
+  });
+
+  players[currentPlayer] = {...p, score:newScore, active_type:null, active_card_id:null, active_text:null, active_points:null, card_drawn_at:null};
+  renderDraw();
+}
+
+// ============ RENDER ============
+function renderDraw(){
+  const p = players[currentPlayer] || {};
+  const face = document.getElementById("cardface");
+  const drawBtn = document.getElementById("drawBtn");
+  const completeBtn = document.getElementById("completeBtn");
+
+  if(p.active_type){
+    const label = p.active_type === "hot_or_not" ? "Hot or Not" : p.active_type === "photo" ? "Photo Prompt" : "Dare";
+    face.className = "cardface";
+    face.innerHTML = `<div class="type-pill ${p.active_type}">${label}</div>
+      <div class="cardtext">${escapeHtml(p.active_text)}</div>
+      <div class="points">${p.active_points} pts</div>`;
+    drawBtn.style.display = "none";
+    completeBtn.style.display = "block";
+  } else {
+    face.className = "cardface empty";
+    face.textContent = "Tap Draw to pull a card";
+    drawBtn.style.display = "block";
+    drawBtn.disabled = false;
+    completeBtn.style.display = "none";
+  }
+
+  const other = players[otherPlayer()] || {};
+  const pbox = document.getElementById("partnerBox");
+  if(other.active_type){
+    const label = other.active_type === "hot_or_not" ? "Hot or Not" : other.active_type === "photo" ? "Photo Prompt" : "Dare";
+    pbox.style.display = "block";
+    pbox.innerHTML = `<div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${otherPlayer()}'s ${label} today</div>
+      <div style="color:var(--text);font-size:0.95rem;line-height:1.4;">${escapeHtml(other.active_text)}</div>
+      <div style="margin-top:6px;color:var(--gold);font-size:0.8rem;">${other.active_points} pts</div>`;
+  } else {
+    pbox.style.display = "none";
+  }
+}
+
+function escapeHtml(s){
+  const d = document.createElement("div");
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+async function loadWeekState(){
+  const {data} = await supabaseClient.from("week_state").select("*").eq("id",1).single();
+  weekState = data || {};
+}
+
+function renderPrizeArea(){
+  const area = document.getElementById("prizeArea");
+
+  if(weekState.prize){
+    area.innerHTML = `<div class="prize-box">
+      <div class="label">This week's prize</div>
+      <div class="text">${escapeHtml(weekState.prize)}</div>
+    </div>`;
+    return;
+  }
+
+  if(weekState.request_status === "pending"){
+    const isRequester = weekState.requested_by === currentPlayer;
+    if(isRequester){
+      area.innerHTML = `<div class="prize-box">
+        <div class="label">Waiting on ${otherPlayer()}</div>
+        <div class="text">"${escapeHtml(weekState.requested_text)}"</div>
+      </div>`;
+    } else {
+      area.innerHTML = `<div class="prize-box">
+        <div class="label">${weekState.requested_by} suggested a prize</div>
+        <div class="text">"${escapeHtml(weekState.requested_text)}"</div>
+        <div class="prize-actions">
+          <button class="btn-approve" id="approvePrizeBtn">Approve</button>
+          <button class="btn-decline" id="declinePrizeBtn">Decline</button>
+        </div>
+      </div>`;
+      document.getElementById("approvePrizeBtn").addEventListener("click", approvePrize);
+      document.getElementById("declinePrizeBtn").addEventListener("click", declinePrize);
+    }
+    return;
+  }
+
+  area.innerHTML = `<div class="prize-box">
+    <div class="label">No prize set yet</div>
+    <button class="btn-draw" id="drawPrizeBtn">Draw a random prize</button>
+    <div class="suggest-row">
+      <input type="text" id="suggestPrizeInput" placeholder="Or suggest one...">
+      <button id="suggestPrizeBtn">Suggest</button>
+    </div>
+  </div>`;
+  document.getElementById("drawPrizeBtn").addEventListener("click", drawPrize);
+  document.getElementById("suggestPrizeBtn").addEventListener("click", suggestPrize);
+}
+
+async function drawPrize(){
+  const {data: pool} = await supabaseClient.from("prizes").select("*");
+  if(!pool || pool.length === 0){ alert("No prizes in the pool yet. Add some in Settings."); return; }
+  const chosen = pool[Math.floor(Math.random()*pool.length)];
+  await supabaseClient.from("week_state").update({prize: chosen.text, request_status:"none", requested_by:null, requested_text:null}).eq("id",1);
+  await loadWeekState();
+  renderPrizeArea();
+}
+
+async function suggestPrize(){
+  const val = document.getElementById("suggestPrizeInput").value.trim();
+  if(!val) return;
+  await supabaseClient.from("week_state").update({request_status:"pending", requested_by: currentPlayer, requested_text: val}).eq("id",1);
+  await loadWeekState();
+  renderPrizeArea();
+}
+
+async function approvePrize(){
+  await supabaseClient.from("week_state").update({prize: weekState.requested_text, request_status:"none", requested_by:null, requested_text:null}).eq("id",1);
+  await loadWeekState();
+  renderPrizeArea();
+}
+
+async function declinePrize(){
+  await supabaseClient.from("week_state").update({request_status:"none", requested_by:null, requested_text:null}).eq("id",1);
+  await loadWeekState();
+  renderPrizeArea();
+}
+
+async function renderScores(){
+  await loadWeekState();
+  renderPrizeArea();
+  const rows = document.getElementById("scoreRows");
+  rows.innerHTML = ["Steve","Vi"].map(n=>{
+    const p = players[n] || {score:0};
+    return `<div class="score-row"><div class="name">${n}</div><div class="pts">${p.score||0}</div></div>`;
+  }).join("");
+
+  const {data: hist} = await supabaseClient.from("history").select("*").order("completed_at",{ascending:false}).limit(20);
+  const list = document.getElementById("historyList");
+  list.innerHTML = (hist||[]).map(h=>{
+    const label = h.type === "hot_or_not" ? "Hot or Not" : h.type === "photo" ? "Photo" : "Dare";
+    return `<div class="history-item">
+      <div><div class="htype">${label} · ${h.player_name}</div>${escapeHtml(h.text||"")}</div>
+      <div style="color:var(--gold);font-weight:700;">+${h.points}</div>
+    </div>`;
+  }).join("") || `<div style="color:var(--muted);font-size:0.85rem;">No completions yet.</div>`;
+}
+
+async function renderCounts(){
+  const {count: dareCount} = await supabaseClient.from("dares").select("*",{count:"exact",head:true});
+  const {count: photoCount} = await supabaseClient.from("photo_prompts").select("*",{count:"exact",head:true});
+  document.getElementById("dareCount").textContent = `(${dareCount||0})`;
+  document.getElementById("photoCount").textContent = `(${photoCount||0})`;
+}
+
+async function renderPrizeAdmin(){
+  const {data: pool} = await supabaseClient.from("prizes").select("*").order("text");
+  document.getElementById("prizeCount").textContent = `(${(pool||[]).length})`;
+  const list = document.getElementById("prizeListAdmin");
+  list.innerHTML = (pool||[]).map(p=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--line);font-size:0.85rem;">
+      <span>${escapeHtml(p.text)}</span>
+      <button data-id="${p.id}" class="delPrizeBtn" style="background:none;border:none;color:var(--muted);font-size:0.8rem;">Remove</button>
+    </div>`).join("") || `<div style="color:var(--muted);font-size:0.85rem;">No prizes added yet.</div>`;
+  document.querySelectorAll(".delPrizeBtn").forEach(b=>{
+    b.addEventListener("click", async ()=>{
+      await supabaseClient.from("prizes").delete().eq("id", b.dataset.id);
+      renderPrizeAdmin();
+    });
+  });
+}
+
+// ============ NAV ============
+function showView(v){
+  document.querySelectorAll(".view").forEach(el=>el.classList.remove("active"));
+  document.getElementById("view-"+v).classList.add("active");
+  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("active", b.dataset.v===v));
+  if(v==="scores") renderScores();
+  if(v==="deck") renderCounts();
+  if(v==="settings") renderPrizeAdmin();
+}
+document.querySelectorAll("nav button").forEach(b=>{
+  b.addEventListener("click", ()=>showView(b.dataset.v));
+});
+
+document.querySelectorAll("#playerBar button").forEach(b=>{
+  b.addEventListener("click", async ()=>{
+    currentPlayer = b.dataset.p;
+    localStorage.setItem("player", currentPlayer);
+    document.querySelectorAll("#playerBar button").forEach(x=>x.classList.toggle("active", x===b));
+    await loadPlayers();
+    renderDraw();
+  });
+});
+document.querySelectorAll("#playerBar button").forEach(b=>{
+  if(b.dataset.p === currentPlayer) b.classList.add("active");
+  else b.classList.remove("active");
+});
+
+document.getElementById("drawBtn").addEventListener("click", drawCard);
+document.getElementById("completeBtn").addEventListener("click", completeCard);
+
+// ============ ADMIN ============
+document.getElementById("gearBtn").addEventListener("click", ()=>{
+  const pin = prompt("PIN?");
+  if(pin === ADMIN_PIN){
+    document.getElementById("navDeck").style.display = "block";
+    document.getElementById("navSettings").style.display = "block";
+    alert("Admin unlocked. Deck and Settings tabs are now visible.");
+  }
+});
+
+document.getElementById("dareUploadBtn").addEventListener("click", async ()=>{
+  const file = document.getElementById("dareCsv").files[0];
+  const msg = document.getElementById("dareMsg");
+  if(!file){ msg.textContent="Choose a CSV first."; msg.className="msg err"; return; }
+  const text = await file.text();
+  const rows = parseCsv(text).map(([text,type,points])=>({text, type, points: parseInt(points,10)}));
+  const {error} = await supabaseClient.from("dares").insert(rows);
+  if(error){ msg.textContent = error.message; msg.className="msg err"; }
+  else { msg.textContent = `Uploaded ${rows.length} dares.`; msg.className="msg ok"; renderCounts(); }
+});
+document.getElementById("dareClearBtn").addEventListener("click", async ()=>{
+  if(!confirm("Delete all dares and their draw history? This cannot be undone.")) return;
+  await supabaseClient.from("drawn_dares").delete().neq("player_name","");
+  await supabaseClient.from("dares").delete().neq("id","00000000-0000-0000-0000-000000000000");
+  renderCounts();
+});
+
+document.getElementById("photoUploadBtn").addEventListener("click", async ()=>{
+  const file = document.getElementById("photoCsv").files[0];
+  const msg = document.getElementById("photoMsg");
+  if(!file){ msg.textContent="Choose a CSV first."; msg.className="msg err"; return; }
+  const text = await file.text();
+  const rows = parseCsv(text).map(([text,target,tier])=>{
+    const t = parseInt(tier,10);
+    return {text, target, tier:t, points: TIER_POINTS[t]||10};
+  });
+  const {error} = await supabaseClient.from("photo_prompts").insert(rows);
+  if(error){ msg.textContent = error.message; msg.className="msg err"; }
+  else { msg.textContent = `Uploaded ${rows.length} photo prompts.`; msg.className="msg ok"; renderCounts(); }
+});
+document.getElementById("photoClearBtn").addEventListener("click", async ()=>{
+  if(!confirm("Delete all photo prompts and their draw history? This cannot be undone.")) return;
+  await supabaseClient.from("drawn_photo_prompts").delete().neq("player_name","");
+  await supabaseClient.from("photo_prompts").delete().neq("id","00000000-0000-0000-0000-000000000000");
+  renderCounts();
+});
+
+document.getElementById("adjBtn").addEventListener("click", async ()=>{
+  const name = document.getElementById("adjPlayer").value;
+  const val = parseInt(document.getElementById("adjScore").value,10);
+  const msg = document.getElementById("adjMsg");
+  if(isNaN(val)){ msg.textContent="Enter a number."; msg.className="msg err"; return; }
+  await supabaseClient.from("players").update({score:val}).eq("name",name);
+  msg.textContent = `${name}'s score set to ${val}.`; msg.className="msg ok";
+  await loadPlayers();
+});
+
+document.getElementById("resetDaresBtn").addEventListener("click", async ()=>{
+  const name = document.getElementById("resetPlayer").value;
+  await supabaseClient.from("drawn_dares").delete().eq("player_name", name);
+  document.getElementById("resetMsg").textContent = `${name}'s dare pool reset.`;
+  document.getElementById("resetMsg").className = "msg ok";
+});
+document.getElementById("resetPhotosBtn").addEventListener("click", async ()=>{
+  const name = document.getElementById("resetPlayer").value;
+  await supabaseClient.from("drawn_photo_prompts").delete().eq("player_name", name);
+  document.getElementById("resetMsg").textContent = `${name}'s photo pool reset.`;
+  document.getElementById("resetMsg").className = "msg ok";
+});
+
+document.getElementById("addPrizeBtn").addEventListener("click", async ()=>{
+  const input = document.getElementById("newPrizeInput");
+  const val = input.value.trim();
+  if(!val) return;
+  await supabaseClient.from("prizes").insert({text: val});
+  input.value = "";
+  renderPrizeAdmin();
+});
+
+document.getElementById("resetWeekBtn").addEventListener("click", async ()=>{
+  if(!confirm("Reset scores, history, and this week's prize? The prize pool and card decks stay untouched.")) return;
+  await supabaseClient.from("players").update({score:0}).eq("name","Steve");
+  await supabaseClient.from("players").update({score:0}).eq("name","Vi");
+  await supabaseClient.from("history").delete().neq("player_name","");
+  await supabaseClient.from("week_state").update({
+    prize:null, request_status:"none", requested_by:null, requested_text:null, week_start:new Date().toISOString()
+  }).eq("id",1);
+  document.getElementById("resetWeekMsg").textContent = "New week started.";
+  document.getElementById("resetWeekMsg").className = "msg ok";
+  await loadPlayers();
+});
+
+// ============ INIT ============
+(async function init(){
+  await loadPlayers();
+  renderDraw();
+  setInterval(async ()=>{
+    if(document.getElementById("view-draw").classList.contains("active")){
+      await loadPlayers();
+      renderDraw();
+    }
+  }, 15000);
+})();
+</script>
+</body>
+</html>
