@@ -315,6 +315,15 @@
       <div class="msg" id="adjMsg"></div>
     </div>
     <div class="admin-section">
+      <h3>Clear today's pull</h3>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Cancels whatever a player currently has active and puts it back in their pool — no points awarded, and the card can be drawn again like it never happened.</p>
+      <select id="clearPullPlayer" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);margin-bottom:8px;">
+        <option>Steve</option><option>Vi</option>
+      </select>
+      <button class="action" id="clearPullBtn" style="background:#5a3a2e;">Clear pull</button>
+      <div class="msg" id="clearPullMsg"></div>
+    </div>
+    <div class="admin-section">
       <h3>Reset a player's draw pool</h3>
       <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Forces the next draw to start a fresh cycle instead of waiting for the pool to empty naturally.</p>
       <select id="resetPlayer" style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);margin-bottom:8px;">
@@ -327,9 +336,9 @@
     <div class="admin-section">
       <h3>Prize pool <span class="count-pill" id="prizeCount"></span></h3>
       <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Standing list of rewards to pull from when either of you hits "Draw a prize." Write-in requests don't touch this list.</p>
-      <label>Add a prize</label>
-      <div class="suggest-row">
-        <input type="text" id="newPrizeInput" placeholder="e.g. Winner picks the restaurant">
+      <label>Add prizes (one per line, or paste a whole list)</label>
+      <div class="suggest-row" style="align-items:flex-start;">
+        <textarea id="newPrizeInput" placeholder="e.g. Winner picks the restaurant" style="flex:1;padding:10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:0.85rem;min-height:70px;font-family:inherit;resize:vertical;"></textarea>
         <button id="addPrizeBtn">Add</button>
       </div>
       <div id="prizeListAdmin" style="margin-top:12px;"></div>
@@ -736,6 +745,27 @@ document.getElementById("adjBtn").addEventListener("click", async ()=>{
   await loadPlayers();
 });
 
+document.getElementById("clearPullBtn").addEventListener("click", async ()=>{
+  const name = document.getElementById("clearPullPlayer").value;
+  const p = players[name];
+
+  // put the card back in the pool (remove it from the drawn-tracking table)
+  if(p && p.active_type === "dare" && p.active_card_id){
+    await supabaseClient.from("drawn_dares").delete().eq("player_name", name).eq("dare_id", p.active_card_id);
+  } else if(p && p.active_type === "photo" && p.active_card_id){
+    await supabaseClient.from("drawn_photo_prompts").delete().eq("player_name", name).eq("prompt_id", p.active_card_id);
+  }
+
+  await supabaseClient.from("players").update({
+    active_type:null, active_card_id:null, active_text:null,
+    active_points:null, card_drawn_at:null
+  }).eq("name", name);
+  document.getElementById("clearPullMsg").textContent = `${name}'s current pull cleared and returned to the pool.`;
+  document.getElementById("clearPullMsg").className = "msg ok";
+  await loadPlayers();
+  renderDraw();
+});
+
 document.getElementById("resetDaresBtn").addEventListener("click", async ()=>{
   const name = document.getElementById("resetPlayer").value;
   await supabaseClient.from("drawn_dares").delete().eq("player_name", name);
@@ -751,9 +781,9 @@ document.getElementById("resetPhotosBtn").addEventListener("click", async ()=>{
 
 document.getElementById("addPrizeBtn").addEventListener("click", async ()=>{
   const input = document.getElementById("newPrizeInput");
-  const val = input.value.trim();
-  if(!val) return;
-  await supabaseClient.from("prizes").insert({text: val});
+  const lines = input.value.split("\n").map(s=>s.trim()).filter(Boolean);
+  if(lines.length === 0) return;
+  await supabaseClient.from("prizes").insert(lines.map(text=>({text})));
   input.value = "";
   renderPrizeAdmin();
 });
