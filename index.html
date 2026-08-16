@@ -388,6 +388,13 @@ function mtCutoffISO(){
   return cutoff.toISOString();
 }
 
+function weekCutoffISO(){
+  // Most recent Sunday 7am UTC (Sunday midnight Mountain Time) boundary
+  const cutoff = new Date(mtCutoffISO());
+  while (cutoff.getUTCDay() !== 0) cutoff.setUTCDate(cutoff.getUTCDate() - 1);
+  return cutoff.toISOString();
+}
+
 function parseCsv(text){
   return text.trim().split("\n").slice(1).map(line=>{
     const parts = [];
@@ -535,7 +542,24 @@ function escapeHtml(s){
   return d.innerHTML;
 }
 
+async function resetWeekIfNeeded(){
+  const {data} = await supabaseClient.from("week_state").select("*").eq("id",1).single();
+  const ws = data || {};
+  if(!ws.week_start || new Date(ws.week_start) < new Date(weekCutoffISO())){
+    await supabaseClient.from("players").update({score:0}).eq("name","Steve");
+    await supabaseClient.from("players").update({score:0}).eq("name","Vi");
+    await supabaseClient.from("history").delete().neq("player_name","");
+    await supabaseClient.from("week_state").update({
+      prize:null, request_status:"none", requested_by:null, requested_text:null, week_start:new Date().toISOString()
+    }).eq("id",1);
+    await loadPlayers();
+    return true;
+  }
+  return false;
+}
+
 async function loadWeekState(){
+  await resetWeekIfNeeded();
   const {data} = await supabaseClient.from("week_state").select("*").eq("id",1).single();
   weekState = data || {};
 }
