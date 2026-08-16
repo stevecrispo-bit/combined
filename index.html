@@ -99,6 +99,7 @@
   .type-pill.dare{ background:rgba(224,99,46,0.18); color:var(--ember); }
   .type-pill.photo{ background:rgba(212,162,76,0.18); color:var(--gold); }
   .type-pill.hot_or_not{ background:rgba(127,174,111,0.18); color:var(--good); }
+  .type-pill.top5{ background:rgba(122,143,209,0.18); color:#7a8fd1; }
 
   .cardface .cardtext{
     font-size:1.15rem;
@@ -368,6 +369,8 @@ const SUPABASE_ANON_KEY = "sb_publishable_hTy8HIzg9vVIbStW2CyiHA_5TLZ42mL";
 const ADMIN_PIN = "1313";
 const HOT_OR_NOT_TEXT = "Send something hot 🔥 — your call. When they've reacted, mark it complete.";
 const HOT_OR_NOT_POINTS = 20;
+const TOP5_TEXT = "Tell your partner a Top 5 list of your choosing about them — favorite memories, best qualities, whatever you pick. Share it, then mark it complete.";
+const TOP5_POINTS = 20;
 const TIER_POINTS = {1:5, 2:10, 3:15, 4:20, 5:25};
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -434,12 +437,15 @@ async function expireIfNeeded(name){
 // ============ DRAW LOGIC ============
 async function drawCard(){
   document.getElementById("drawBtn").disabled = true;
-  const type = ["dare","photo","hot_or_not"][Math.floor(Math.random()*3)];
+  const type = ["dare","photo","hot_or_not","top5"][Math.floor(Math.random()*4)];
   let text, points, cardId=null;
 
   if(type === "hot_or_not"){
     text = HOT_OR_NOT_TEXT;
     points = HOT_OR_NOT_POINTS;
+  } else if(type === "top5"){
+    text = TOP5_TEXT;
+    points = TOP5_POINTS;
   } else if(type === "dare"){
     const picked = await pickFromPool("dares", "drawn_dares", "dare_id", []);
     if(!picked){ document.getElementById("drawBtn").disabled=false; return; }
@@ -508,7 +514,7 @@ function renderDraw(){
   const completeBtn = document.getElementById("completeBtn");
 
   if(p.active_type){
-    const label = p.active_type === "hot_or_not" ? "Hot or Not" : p.active_type === "photo" ? "Photo Prompt" : "Dare";
+    const label = typeLabel(p.active_type);
     face.className = "cardface";
     face.innerHTML = `<div class="type-pill ${p.active_type}">${label}</div>
       <div class="cardtext">${escapeHtml(p.active_text)}</div>
@@ -526,7 +532,7 @@ function renderDraw(){
   const other = players[otherPlayer()] || {};
   const pbox = document.getElementById("partnerBox");
   if(other.active_type){
-    const label = other.active_type === "hot_or_not" ? "Hot or Not" : other.active_type === "photo" ? "Photo Prompt" : "Dare";
+    const label = typeLabel(other.active_type);
     pbox.style.display = "block";
     pbox.innerHTML = `<div style="font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;">${otherPlayer()}'s ${label} today</div>
       <div style="color:var(--text);font-size:0.95rem;line-height:1.4;">${escapeHtml(other.active_text)}</div>
@@ -534,6 +540,13 @@ function renderDraw(){
   } else {
     pbox.style.display = "none";
   }
+}
+
+function typeLabel(type){
+  if(type === "hot_or_not") return "Hot or Not";
+  if(type === "top5") return "Top 5";
+  if(type === "photo") return "Photo Prompt";
+  return "Dare";
 }
 
 function escapeHtml(s){
@@ -650,7 +663,7 @@ async function renderScores(){
   const {data: hist} = await supabaseClient.from("history").select("*").order("completed_at",{ascending:false}).limit(20);
   const list = document.getElementById("historyList");
   list.innerHTML = (hist||[]).map(h=>{
-    const label = h.type === "hot_or_not" ? "Hot or Not" : h.type === "photo" ? "Photo" : "Dare";
+    const label = h.type === "hot_or_not" ? "Hot or Not" : h.type === "top5" ? "Top 5" : h.type === "photo" ? "Photo" : "Dare";
     return `<div class="history-item">
       <div><div class="htype">${label} · ${h.player_name}</div>${escapeHtml(h.text||"")}</div>
       <div style="color:var(--gold);font-weight:700;">+${h.points}</div>
