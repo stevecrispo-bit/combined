@@ -369,7 +369,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_hTy8HIzg9vVIbStW2CyiHA_5TLZ42mL";
 const ADMIN_PIN = "1313";
 const HOT_OR_NOT_TEXT = "Send something hot 🔥 — your call. When they've reacted, mark it complete.";
 const HOT_OR_NOT_POINTS = 20;
-const TOP5_TEXT = "Tell your partner a Top 5 list of your choosing about them — favorite memories, best qualities, whatever you pick. Share it, then mark it complete.";
+function top5Text(){
+  return `Ask ${otherPlayer()} to name a Top 5 topic on the spot (like "Top 5 favorite foods"). Once they give you one, answer it out loud, then mark it complete.`;
+}
 const TOP5_POINTS = 20;
 const TIER_POINTS = {1:5, 2:10, 3:15, 4:20, 5:25};
 
@@ -444,7 +446,7 @@ async function drawCard(){
     text = HOT_OR_NOT_TEXT;
     points = HOT_OR_NOT_POINTS;
   } else if(type === "top5"){
-    text = TOP5_TEXT;
+    text = top5Text();
     points = TOP5_POINTS;
   } else if(type === "dare"){
     const picked = await pickFromPool("dares", "drawn_dares", "dare_id", []);
