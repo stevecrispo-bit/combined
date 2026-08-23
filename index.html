@@ -437,9 +437,30 @@ async function expireIfNeeded(name){
 }
 
 // ============ DRAW LOGIC ============
+async function weeklyTypeCounts(name){
+  const {data} = await supabaseClient.from("history")
+    .select("type")
+    .eq("player_name", name)
+    .gte("completed_at", weekCutoffISO());
+  const counts = {};
+  (data||[]).forEach(h=>counts[h.type]=(counts[h.type]||0)+1);
+  return counts;
+}
+
 async function drawCard(){
   document.getElementById("drawBtn").disabled = true;
-  const type = ["dare","photo","hot_or_not","top5"][Math.floor(Math.random()*4)];
+  const counts = await weeklyTypeCounts(currentPlayer);
+  const onceAWeek = ["hot_or_not","top5"];
+  const candidates = ["dare","photo","hot_or_not","top5"].filter(t=>{
+    if(onceAWeek.includes(t) && (counts[t]||0) >= 1) return false;
+    return true;
+  });
+  if(candidates.length === 0){
+    alert("You've already pulled everything available this week. Check back after the weekly reset.");
+    document.getElementById("drawBtn").disabled = false;
+    return;
+  }
+  const type = candidates[Math.floor(Math.random()*candidates.length)];
   let text, points, cardId=null;
 
   if(type === "hot_or_not"){
