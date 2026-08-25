@@ -291,6 +291,17 @@
       <button class="action" id="dareUploadBtn">Upload dares</button>
       <button class="action" id="dareClearBtn" style="background:#5a3a2e;">Clear all dares</button>
       <div class="msg" id="dareMsg"></div>
+
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line);">
+        <label style="margin-top:0;">Add a single dare</label>
+        <textarea id="dareOneText" placeholder="Dare text..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:0.9rem;min-height:60px;font-family:inherit;resize:vertical;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <input type="text" id="dareOneType" placeholder="type (optional)" style="flex:1;">
+          <input type="text" id="dareOnePoints" placeholder="points" value="10" style="width:80px;">
+        </div>
+        <button class="action" id="dareOneAddBtn">Add dare</button>
+        <div class="msg" id="dareOneMsg"></div>
+      </div>
     </div>
     <div class="admin-section">
       <h3>Photo Prompts <span class="count-pill" id="photoCount"></span></h3>
@@ -299,6 +310,27 @@
       <button class="action" id="photoUploadBtn">Upload photo prompts</button>
       <button class="action" id="photoClearBtn" style="background:#5a3a2e;">Clear all photo prompts</button>
       <div class="msg" id="photoMsg"></div>
+
+      <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--line);">
+        <label style="margin-top:0;">Add a single photo prompt</label>
+        <textarea id="photoOneText" placeholder="Photo prompt text..." style="width:100%;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:0.9rem;min-height:60px;font-family:inherit;resize:vertical;"></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <select id="photoOneTarget" style="flex:1;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);">
+            <option value="his">his</option>
+            <option value="hers">hers</option>
+            <option value="communal" selected>communal</option>
+          </select>
+          <select id="photoOneTier" style="width:110px;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);">
+            <option value="1">Tier 1 (5)</option>
+            <option value="2">Tier 2 (10)</option>
+            <option value="3" selected>Tier 3 (15)</option>
+            <option value="4">Tier 4 (20)</option>
+            <option value="5">Tier 5 (25)</option>
+          </select>
+        </div>
+        <button class="action" id="photoOneAddBtn">Add photo prompt</button>
+        <div class="msg" id="photoOneMsg"></div>
+      </div>
     </div>
   </section>
 
@@ -775,6 +807,25 @@ document.getElementById("dareClearBtn").addEventListener("click", async ()=>{
   renderCounts();
 });
 
+document.getElementById("dareOneAddBtn").addEventListener("click", async ()=>{
+  const msg = document.getElementById("dareOneMsg");
+  const text = document.getElementById("dareOneText").value.trim();
+  const type = document.getElementById("dareOneType").value.trim();
+  const points = parseInt(document.getElementById("dareOnePoints").value, 10);
+  if(!text){ msg.textContent="Enter dare text first."; msg.className="msg err"; return; }
+  if(isNaN(points)){ msg.textContent="Points must be a number."; msg.className="msg err"; return; }
+  const {error} = await supabaseClient.from("dares").insert({text, type: type || null, points});
+  if(error){ msg.textContent = error.message; msg.className="msg err"; }
+  else {
+    msg.textContent = "Dare added.";
+    msg.className = "msg ok";
+    document.getElementById("dareOneText").value = "";
+    document.getElementById("dareOneType").value = "";
+    document.getElementById("dareOnePoints").value = "10";
+    renderCounts();
+  }
+});
+
 document.getElementById("photoUploadBtn").addEventListener("click", async ()=>{
   const file = document.getElementById("photoCsv").files[0];
   const msg = document.getElementById("photoMsg");
@@ -793,6 +844,25 @@ document.getElementById("photoClearBtn").addEventListener("click", async ()=>{
   await supabaseClient.from("drawn_photo_prompts").delete().neq("player_name","");
   await supabaseClient.from("photo_prompts").delete().neq("id","00000000-0000-0000-0000-000000000000");
   renderCounts();
+});
+
+document.getElementById("photoOneAddBtn").addEventListener("click", async ()=>{
+  const msg = document.getElementById("photoOneMsg");
+  const text = document.getElementById("photoOneText").value.trim();
+  const target = document.getElementById("photoOneTarget").value;
+  const tier = parseInt(document.getElementById("photoOneTier").value, 10);
+  if(!text){ msg.textContent="Enter prompt text first."; msg.className="msg err"; return; }
+  const points = TIER_POINTS[tier] || 10;
+  const {error} = await supabaseClient.from("photo_prompts").insert({text, target, tier, points});
+  if(error){ msg.textContent = error.message; msg.className="msg err"; }
+  else {
+    msg.textContent = "Photo prompt added.";
+    msg.className = "msg ok";
+    document.getElementById("photoOneText").value = "";
+    document.getElementById("photoOneTarget").value = "communal";
+    document.getElementById("photoOneTier").value = "3";
+    renderCounts();
+  }
 });
 
 document.getElementById("adjBtn").addEventListener("click", async ()=>{
