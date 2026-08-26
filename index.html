@@ -299,6 +299,10 @@
           <input type="text" id="dareOneType" placeholder="type (optional)" style="flex:1;">
           <input type="text" id="dareOnePoints" placeholder="points" value="10" style="width:80px;">
         </div>
+        <label style="display:flex;align-items:center;gap:8px;margin:10px 0 0;cursor:pointer;">
+          <input type="checkbox" id="dareOnePriority" style="width:auto;margin:0;">
+          <span style="color:var(--text);font-size:0.85rem;">Make this the next dare pulled</span>
+        </label>
         <button class="action" id="dareOneAddBtn">Add dare</button>
         <div class="msg" id="dareOneMsg"></div>
       </div>
@@ -328,6 +332,10 @@
             <option value="5">Tier 5 (25)</option>
           </select>
         </div>
+        <label style="display:flex;align-items:center;gap:8px;margin:10px 0 0;cursor:pointer;">
+          <input type="checkbox" id="photoOnePriority" style="width:auto;margin:0;">
+          <span style="color:var(--text);font-size:0.85rem;">Make this the next photo prompt pulled</span>
+        </label>
         <button class="action" id="photoOneAddBtn">Add photo prompt</button>
         <div class="msg" id="photoOneMsg"></div>
       </div>
@@ -479,6 +487,29 @@ async function weeklyTypeCounts(name){
   return counts;
 }
 
+// Returns which card types ("dare"/"photo") currently have a priority-flagged
+// card still available to this player, so a draw can be forced to that type.
+async function priorityTypesForPlayer(){
+  const forced = [];
+
+  const {data: pDares} = await supabaseClient.from("dares").select("id").eq("priority", true);
+  if(pDares && pDares.length){
+    const {data: drawn} = await supabaseClient.from("drawn_dares").select("dare_id").eq("player_name", currentPlayer);
+    const drawnIds = new Set((drawn||[]).map(r=>r.dare_id));
+    if(pDares.some(d=>!drawnIds.has(d.id))) forced.push("dare");
+  }
+
+  const targets = currentPlayer === "Steve" ? ["his","communal"] : ["hers","communal"];
+  const {data: pPhotos} = await supabaseClient.from("photo_prompts").select("id").eq("priority", true).in("target", targets);
+  if(pPhotos && pPhotos.length){
+    const {data: drawnP} = await supabaseClient.from("drawn_photo_prompts").select("prompt_id").eq("player_name", currentPlayer);
+    const drawnPIds = new Set((drawnP||[]).map(r=>r.prompt_id));
+    if(pPhotos.some(p=>!drawnPIds.has(p.id))) forced.push("photo");
+  }
+
+  return forced;
+}
+
 async function drawCard(){
   document.getElementById("drawBtn").disabled = true;
   const counts = await weeklyTypeCounts(currentPlayer);
@@ -492,7 +523,12 @@ async function drawCard(){
     document.getElementById("drawBtn").disabled = false;
     return;
   }
-  const type = candidates[Math.floor(Math.random()*candidates.length)];
+  // A priority-flagged dare/photo forces the draw to that type, skipping the
+  // normal random pick entirely.
+  const forcedTypes = await priorityTypesForPlayer();
+  const type = forcedTypes.length
+    ? forcedTypes[Math.floor(Math.random()*forcedTypes.length)]
+    : candidates[Math.floor(Math.random()*candidates.length)];
   let text, points, cardId=null;
 
   if(type === "hot_or_not"){
@@ -538,8 +574,16 @@ async function pickFromPool(table, drawnTable, drawnCol, targetFilter){
     await supabaseClient.from(drawnTable).delete().eq("player_name", currentPlayer);
     available = allCards;
   }
-  const chosen = available[Math.floor(Math.random()*available.length)];
+
+  // Priority cards (flagged via "make this the next pull") jump the queue.
+  const priorityCards = available.filter(c=>c.priority);
+  const pickPool = priorityCards.length ? priorityCards : available;
+  const chosen = pickPool[Math.floor(Math.random()*pickPool.length)];
+
   await supabaseClient.from(drawnTable).insert({player_name: currentPlayer, [drawnCol]: chosen.id});
+  if(chosen.priority){
+    await supabaseClient.from(table).update({priority:false}).eq("id", chosen.id);
+  }
   return chosen;
 }
 
@@ -812,16 +856,18 @@ document.getElementById("dareOneAddBtn").addEventListener("click", async ()=>{
   const text = document.getElementById("dareOneText").value.trim();
   const type = document.getElementById("dareOneType").value.trim();
   const points = parseInt(document.getElementById("dareOnePoints").value, 10);
+  const priority = document.getElementById("dareOnePriority").checked;
   if(!text){ msg.textContent="Enter dare text first."; msg.className="msg err"; return; }
   if(isNaN(points)){ msg.textContent="Points must be a number."; msg.className="msg err"; return; }
-  const {error} = await supabaseClient.from("dares").insert({text, type: type || null, points});
+  const {error} = await supabaseClient.from("dares").insert({text, type: type || null, points, priority});
   if(error){ msg.textContent = error.message; msg.className="msg err"; }
   else {
-    msg.textContent = "Dare added.";
+    msg.textContent = priority ? "Dare added — it'll be the next dare pulled." : "Dare added.";
     msg.className = "msg ok";
     document.getElementById("dareOneText").value = "";
     document.getElementById("dareOneType").value = "";
     document.getElementById("dareOnePoints").value = "10";
+    document.getElementById("dareOnePriority").checked = false;
     renderCounts();
   }
 });
@@ -851,16 +897,18 @@ document.getElementById("photoOneAddBtn").addEventListener("click", async ()=>{
   const text = document.getElementById("photoOneText").value.trim();
   const target = document.getElementById("photoOneTarget").value;
   const tier = parseInt(document.getElementById("photoOneTier").value, 10);
+  const priority = document.getElementById("photoOnePriority").checked;
   if(!text){ msg.textContent="Enter prompt text first."; msg.className="msg err"; return; }
   const points = TIER_POINTS[tier] || 10;
-  const {error} = await supabaseClient.from("photo_prompts").insert({text, target, tier, points});
+  const {error} = await supabaseClient.from("photo_prompts").insert({text, target, tier, points, priority});
   if(error){ msg.textContent = error.message; msg.className="msg err"; }
   else {
-    msg.textContent = "Photo prompt added.";
+    msg.textContent = priority ? "Photo prompt added — it'll be the next photo prompt pulled." : "Photo prompt added.";
     msg.className = "msg ok";
     document.getElementById("photoOneText").value = "";
     document.getElementById("photoOneTarget").value = "communal";
     document.getElementById("photoOneTier").value = "3";
+    document.getElementById("photoOnePriority").checked = false;
     renderCounts();
   }
 });
