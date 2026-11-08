@@ -247,6 +247,52 @@
   #pinGate{
     max-width:280px; margin:60px auto; text-align:center;
   }
+  /* ---- Green Light ---- */
+  .gl-title{font-size:0.7rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted);text-align:center;margin:18px 0 12px;}
+  .gl-lights{display:flex;gap:12px;}
+  .gl-light{
+    flex:1;padding:22px 10px;border-radius:16px;border:2px solid var(--line);
+    background:var(--panel);color:var(--muted);font-size:1rem;font-weight:800;
+    display:flex;flex-direction:column;align-items:center;gap:10px;
+  }
+  .gl-light .dot{width:46px;height:46px;border-radius:50%;opacity:0.35;}
+  .gl-light.green .dot{background:#3fbf5a;}
+  .gl-light.red .dot{background:#d8433a;}
+  .gl-light.green.sel{border-color:#3fbf5a;color:#3fbf5a;}
+  .gl-light.red.sel{border-color:#d8433a;color:#d8433a;}
+  .gl-light.sel .dot{opacity:1;box-shadow:0 0 24px currentColor;}
+  .gl-moods{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:6px;}
+  .gl-mood{
+    padding:14px 8px;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel);color:var(--text);font-size:0.9rem;font-weight:600;
+  }
+  .gl-mood:last-child:nth-child(odd){grid-column:1 / -1;}
+  .gl-mood.sel{border-color:var(--ember);background:rgba(224,99,46,0.15);color:var(--ember);}
+  #glSaveBtn{
+    margin-top:20px;width:100%;padding:15px;border-radius:14px;border:none;
+    background:linear-gradient(135deg,var(--ember),#c94f1f);color:#1a0f08;font-size:1rem;font-weight:800;
+  }
+  #glSaveBtn:disabled{opacity:0.4;}
+  .gl-status{
+    margin-top:22px;padding:18px;border-radius:14px;background:var(--panel);
+    border:1px solid var(--line);text-align:center;font-size:0.9rem;color:var(--muted);line-height:1.5;
+  }
+  .gl-status.match{border-color:#3fbf5a;background:linear-gradient(155deg,#16241a,var(--panel-2));color:var(--text);}
+  .gl-status .big{font-size:1.25rem;font-weight:800;color:#3fbf5a;margin-bottom:6px;}
+  .gl-chip{display:inline-block;margin:4px;padding:6px 12px;border-radius:999px;background:rgba(224,99,46,0.18);color:var(--ember);font-weight:700;font-size:0.85rem;}
+  #glOverlay{
+    position:fixed;inset:0;background:rgba(10,8,7,0.85);backdrop-filter:blur(6px);
+    display:none;align-items:center;justify-content:center;z-index:50;padding:24px;
+  }
+  #glOverlay.show{display:flex;}
+  #glOverlay .box{
+    max-width:340px;width:100%;text-align:center;padding:30px 22px;border-radius:20px;
+    background:linear-gradient(155deg,#16241a,var(--panel-2));border:2px solid #3fbf5a;
+    box-shadow:0 0 60px -10px rgba(63,191,90,0.6);
+  }
+  #glOverlay .glow{width:70px;height:70px;border-radius:50%;background:#3fbf5a;margin:0 auto 18px;box-shadow:0 0 40px #3fbf5a;}
+  #glOverlay h2{margin:0 0 8px;font-size:1.4rem;}
+  #glOverlay button{margin-top:20px;padding:12px 28px;border-radius:12px;border:none;background:#3fbf5a;color:#0f1a0e;font-weight:800;}
   .msg{font-size:0.8rem; margin-top:8px;}
   .msg.ok{color:var(--good);}
   .msg.err{color:var(--ember);}
@@ -280,6 +326,21 @@
     <div id="scoreRows"></div>
     <h3 style="font-size:0.8rem;color:var(--muted);letter-spacing:0.08em;text-transform:uppercase;margin:24px 0 8px;">Recent</h3>
     <div id="historyList"></div>
+  </section>
+
+  <!-- GREEN LIGHT VIEW -->
+  <section id="view-light" class="view">
+    <div class="gl-title">In the mood today?</div>
+    <div class="gl-lights">
+      <button class="gl-light green" data-g="1"><span class="dot"></span>Green light</button>
+      <button class="gl-light red" data-g="0"><span class="dot"></span>Red light</button>
+    </div>
+    <div id="glMoodWrap" style="display:none;">
+      <div class="gl-title">What kind of mood? (pick any)</div>
+      <div class="gl-moods" id="glMoods"></div>
+    </div>
+    <button id="glSaveBtn" disabled>Lock it in</button>
+    <div id="glStatus" class="gl-status" style="display:none;"></div>
   </section>
 
   <!-- DECK (admin) -->
@@ -408,9 +469,19 @@
 <nav>
   <button data-v="draw" class="active">Draw</button>
   <button data-v="scores">Scores</button>
+  <button data-v="light">Green Light</button>
   <button data-v="deck" id="navDeck" style="display:none;">Deck</button>
   <button data-v="settings" id="navSettings" style="display:none;">Settings</button>
 </nav>
+
+<div id="glOverlay">
+  <div class="box">
+    <div class="glow"></div>
+    <h2>You matched on green 💚</h2>
+    <div id="glOverlayMoods" style="color:var(--muted);font-size:0.9rem;"></div>
+    <button id="glOverlayClose">Nice</button>
+  </div>
+</div>
 
 <script>
 // ============ CONFIG ============
@@ -815,6 +886,110 @@ async function renderPrizeAdmin(){
   });
 }
 
+// ============ GREEN LIGHT ============
+const GL_MOODS = ["Soft and slow", "Hard and fast", "Vanilla", "Chocolate", "Strawberry"];
+let glDraft = {green:null, moods:[]};   // what's selected on screen
+let glMine = null, glTheirs = null;     // saved rows for today
+let glEditing = false;
+
+function glToday(){ return mtCutoffISO().slice(0,10); } // Mountain Time calendar date
+
+async function loadGreenLight(){
+  const {data} = await supabaseClient.from("mood_checks").select("*").eq("day", glToday());
+  glMine = (data||[]).find(r=>r.player_name===currentPlayer) || null;
+  glTheirs = (data||[]).find(r=>r.player_name===otherPlayer()) || null;
+}
+
+function renderGreenLight(){
+  const locked = glMine && !glEditing;
+  if(!glEditing) glDraft = glMine ? {green:glMine.green, moods:[...(glMine.moods||[])]} : (glDraft.green===null ? {green:null, moods:[]} : glDraft);
+
+  document.querySelectorAll(".gl-light").forEach(b=>{
+    b.classList.toggle("sel", glDraft.green !== null && (b.dataset.g==="1") === glDraft.green);
+    b.disabled = locked;
+  });
+  document.getElementById("glMoodWrap").style.display = glDraft.green ? "block" : "none";
+  document.getElementById("glMoods").innerHTML = GL_MOODS.map(m=>
+    `<button class="gl-mood ${glDraft.moods.includes(m)?"sel":""}" data-m="${m}" ${locked?"disabled":""}>${m}</button>`
+  ).join("");
+  document.querySelectorAll(".gl-mood").forEach(b=>b.addEventListener("click", ()=>{
+    const m = b.dataset.m;
+    glDraft.moods = glDraft.moods.includes(m) ? glDraft.moods.filter(x=>x!==m) : [...glDraft.moods, m];
+    renderGreenLight();
+  }));
+
+  const save = document.getElementById("glSaveBtn");
+  save.textContent = locked ? "Change my answer" : "Lock it in";
+  save.disabled = !locked && glDraft.green === null;
+
+  // Status — your partner's answer stays hidden until you've both answered,
+  // and a "no" never says who said it.
+  const st = document.getElementById("glStatus");
+  st.className = "gl-status";
+  if(!glMine){
+    st.style.display = glTheirs ? "block" : "none";
+    st.innerHTML = `${otherPlayer()} has answered. Lock yours in to see if you match.`;
+    return;
+  }
+  st.style.display = "block";
+  if(!glTheirs){
+    st.innerHTML = `You're locked in. Waiting on ${otherPlayer()}…`;
+    return;
+  }
+  if(glMine.green && glTheirs.green){
+    const shared = (glMine.moods||[]).filter(m=>(glTheirs.moods||[]).includes(m));
+    st.className = "gl-status match";
+    st.innerHTML = `<div class="big">💚 You matched on green!</div>` +
+      (shared.length
+        ? `<div style="margin-bottom:4px;">You both picked:</div>${shared.map(m=>`<span class="gl-chip">${m}</span>`).join("")}`
+        : `<div>No mood overlap today — time to negotiate 😏</div>`);
+    glMaybePopup(shared);
+  } else {
+    st.innerHTML = `No match today. Try again tomorrow ❤️`;
+  }
+}
+
+function glMaybePopup(shared){
+  const key = `glPopup_${currentPlayer}_${glToday()}`;
+  if(localStorage.getItem(key)) return;
+  localStorage.setItem(key, "1");
+  document.getElementById("glOverlayMoods").innerHTML = shared.length
+    ? `You both picked:<br>${shared.map(m=>`<span class="gl-chip">${m}</span>`).join("")}`
+    : "No mood overlap — time to negotiate 😏";
+  document.getElementById("glOverlay").classList.add("show");
+}
+
+document.querySelectorAll(".gl-light").forEach(b=>b.addEventListener("click", ()=>{
+  glDraft.green = b.dataset.g === "1";
+  if(!glDraft.green) glDraft.moods = [];
+  renderGreenLight();
+}));
+
+document.getElementById("glSaveBtn").addEventListener("click", async ()=>{
+  if(glMine && !glEditing){ glEditing = true; renderGreenLight(); return; }
+  if(glDraft.green === null) return;
+  const btn = document.getElementById("glSaveBtn");
+  btn.disabled = true;
+  const {error} = await supabaseClient.from("mood_checks").upsert({
+    day: glToday(), player_name: currentPlayer,
+    green: glDraft.green, moods: glDraft.green ? glDraft.moods : [],
+    updated_at: new Date().toISOString()
+  }, {onConflict: "day,player_name"});
+  if(error){ alert(error.message); btn.disabled = false; return; }
+  glEditing = false;
+  await loadGreenLight();
+  renderGreenLight();
+});
+
+document.getElementById("glOverlayClose").addEventListener("click", ()=>{
+  document.getElementById("glOverlay").classList.remove("show");
+});
+
+async function refreshGreenLight(){
+  await loadGreenLight();
+  renderGreenLight();
+}
+
 // ============ NAV ============
 function showView(v){
   document.querySelectorAll(".view").forEach(el=>el.classList.remove("active"));
@@ -823,6 +998,7 @@ function showView(v){
   if(v==="scores") renderScores();
   if(v==="deck") renderCounts();
   if(v==="settings") renderPrizeAdmin();
+  if(v==="light"){ glEditing = false; glDraft = {green:null, moods:[]}; refreshGreenLight(); }
 }
 document.querySelectorAll("nav button").forEach(b=>{
   b.addEventListener("click", ()=>showView(b.dataset.v));
@@ -835,6 +1011,10 @@ document.querySelectorAll("#playerBar button").forEach(b=>{
     document.querySelectorAll("#playerBar button").forEach(x=>x.classList.toggle("active", x===b));
     await loadPlayers();
     renderDraw();
+    if(document.getElementById("view-light").classList.contains("active")){
+      glEditing = false; glDraft = {green:null, moods:[]};
+      refreshGreenLight();
+    }
   });
 });
 document.querySelectorAll("#playerBar button").forEach(b=>{
@@ -1022,6 +1202,11 @@ document.getElementById("resetWeekBtn").addEventListener("click", async ()=>{
     if(document.getElementById("view-draw").classList.contains("active")){
       await loadPlayers();
       renderDraw();
+    }
+    // Keep Green Light fresh so a match shows up without reloading
+    // (skip while someone's mid-edit so their picks aren't wiped).
+    if(document.getElementById("view-light").classList.contains("active") && !glEditing){
+      await refreshGreenLight();
     }
   }, 15000);
 })();
