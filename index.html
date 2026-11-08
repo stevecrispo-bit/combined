@@ -331,6 +331,7 @@
   <!-- GREEN LIGHT VIEW -->
   <section id="view-light" class="view">
     <div class="gl-title">In the mood today?</div>
+    <div id="glWho" style="text-align:center;font-size:0.8rem;color:var(--muted);margin:-6px 0 14px;"></div>
     <div class="gl-lights">
       <button class="gl-light green" data-g="1"><span class="dot"></span>Green light</button>
       <button class="gl-light red" data-g="0"><span class="dot"></span>Red light</button>
@@ -454,6 +455,12 @@
         <button id="addPrizeBtn">Add</button>
       </div>
       <div id="prizeListAdmin" style="margin-top:12px;"></div>
+    </div>
+    <div class="admin-section">
+      <h3>Green Light phone owner</h3>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Each phone's Green Light tab is locked to whoever answered on it first. Reset if the wrong person got locked in on this phone — it'll switch to whoever is selected on the Draw tab.</p>
+      <button class="action" id="glResetOwnerBtn" style="background:#5a3a2e;">Reset this phone</button>
+      <div class="msg" id="glResetOwnerMsg"></div>
     </div>
     <div class="admin-section">
       <h3>New week</h3>
@@ -892,15 +899,21 @@ let glDraft = {green:null, moods:[]};   // what's selected on screen
 let glMine = null, glTheirs = null;     // saved rows for today
 let glEditing = false;
 
+// Green Light identity is locked to this phone (set on first answer), so
+// flipping the Steve/Vi switch on other tabs can't reveal the partner's pick.
+function glMe(){ return localStorage.getItem("glOwner") || currentPlayer; }
+function glOther(){ return glMe() === "Steve" ? "Vi" : "Steve"; }
+
 function glToday(){ return mtCutoffISO().slice(0,10); } // Mountain Time calendar date
 
 async function loadGreenLight(){
   const {data} = await supabaseClient.from("mood_checks").select("*").eq("day", glToday());
-  glMine = (data||[]).find(r=>r.player_name===currentPlayer) || null;
-  glTheirs = (data||[]).find(r=>r.player_name===otherPlayer()) || null;
+  glMine = (data||[]).find(r=>r.player_name===glMe()) || null;
+  glTheirs = (data||[]).find(r=>r.player_name===glOther()) || null;
 }
 
 function renderGreenLight(){
+  document.getElementById("glWho").textContent = `Answering as ${glMe()}`;
   const locked = glMine && !glEditing;
   if(!glEditing) glDraft = glMine ? {green:glMine.green, moods:[...(glMine.moods||[])]} : (glDraft.green===null ? {green:null, moods:[]} : glDraft);
 
@@ -928,12 +941,12 @@ function renderGreenLight(){
   st.className = "gl-status";
   if(!glMine){
     st.style.display = glTheirs ? "block" : "none";
-    st.innerHTML = `${otherPlayer()} has answered. Lock yours in to see if you match.`;
+    st.innerHTML = `${glOther()} has answered. Lock yours in to see if you match.`;
     return;
   }
   st.style.display = "block";
   if(!glTheirs){
-    st.innerHTML = `You're locked in. Waiting on ${otherPlayer()}…`;
+    st.innerHTML = `You're locked in. Waiting on ${glOther()}…`;
     return;
   }
   if(glMine.green && glTheirs.green){
@@ -950,7 +963,7 @@ function renderGreenLight(){
 }
 
 function glMaybePopup(shared){
-  const key = `glPopup_${currentPlayer}_${glToday()}`;
+  const key = `glPopup_${glMe()}_${glToday()}`;
   if(localStorage.getItem(key)) return;
   localStorage.setItem(key, "1");
   document.getElementById("glOverlayMoods").innerHTML = shared.length
@@ -971,14 +984,22 @@ document.getElementById("glSaveBtn").addEventListener("click", async ()=>{
   const btn = document.getElementById("glSaveBtn");
   btn.disabled = true;
   const {error} = await supabaseClient.from("mood_checks").upsert({
-    day: glToday(), player_name: currentPlayer,
+    day: glToday(), player_name: glMe(),
     green: glDraft.green, moods: glDraft.green ? glDraft.moods : [],
     updated_at: new Date().toISOString()
   }, {onConflict: "day,player_name"});
   if(error){ alert(error.message); btn.disabled = false; return; }
+  localStorage.setItem("glOwner", glMe());
   glEditing = false;
   await loadGreenLight();
   renderGreenLight();
+});
+
+document.getElementById("glResetOwnerBtn").addEventListener("click", ()=>{
+  localStorage.removeItem("glOwner");
+  const m = document.getElementById("glResetOwnerMsg");
+  m.textContent = "Reset. Green Light on this phone will use whoever is selected on the Draw tab.";
+  m.className = "msg ok";
 });
 
 document.getElementById("glOverlayClose").addEventListener("click", ()=>{
@@ -998,6 +1019,7 @@ function showView(v){
   if(v==="scores") renderScores();
   if(v==="deck") renderCounts();
   if(v==="settings") renderPrizeAdmin();
+  document.getElementById("playerBar").style.display = v==="light" ? "none" : "flex";
   if(v==="light"){ glEditing = false; glDraft = {green:null, moods:[]}; refreshGreenLight(); }
 }
 document.querySelectorAll("nav button").forEach(b=>{
