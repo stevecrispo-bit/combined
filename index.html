@@ -330,6 +330,15 @@
 
   <!-- GREEN LIGHT VIEW -->
   <section id="view-light" class="view">
+    <div id="glPick" style="display:none;">
+      <div class="gl-title">Whose phone is this?</div>
+      <div style="text-align:center;font-size:0.8rem;color:var(--muted);margin:-6px 0 14px;">You'll only be asked once on this phone.</div>
+      <div class="gl-lights">
+        <button class="gl-light gl-owner" data-p="Steve">Steve</button>
+        <button class="gl-light gl-owner" data-p="Vi">Vi</button>
+      </div>
+    </div>
+    <div id="glForm">
     <div class="gl-title">In the mood today?</div>
     <div id="glWho" style="text-align:center;font-size:0.8rem;color:var(--muted);margin:-6px 0 14px;"></div>
     <div class="gl-lights">
@@ -342,6 +351,7 @@
     </div>
     <button id="glSaveBtn" disabled>Lock it in</button>
     <div id="glStatus" class="gl-status" style="display:none;"></div>
+    </div>
   </section>
 
   <!-- DECK (admin) -->
@@ -458,7 +468,7 @@
     </div>
     <div class="admin-section">
       <h3>Green Light phone owner</h3>
-      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Each phone's Green Light tab is locked to whoever answered on it first. Reset if the wrong person got locked in on this phone — it'll switch to whoever is selected on the Draw tab.</p>
+      <p style="font-size:0.8rem;color:var(--muted);margin:0 0 10px;">Each phone's Green Light tab is locked to whoever was picked on it. Reset if the wrong person is locked in on this phone — the tab will ask again.</p>
       <button class="action" id="glResetOwnerBtn" style="background:#5a3a2e;">Reset this phone</button>
       <div class="msg" id="glResetOwnerMsg"></div>
     </div>
@@ -901,23 +911,28 @@ let glEditing = false;
 
 // Green Light identity is locked to this phone (set on first answer), so
 // flipping the Steve/Vi switch on other tabs can't reveal the partner's pick.
-function glMe(){ return localStorage.getItem("glOwner") || currentPlayer; }
+function glMe(){ return localStorage.getItem("glOwner"); }
 function glOther(){ return glMe() === "Steve" ? "Vi" : "Steve"; }
 
 function glToday(){ return mtCutoffISO().slice(0,10); } // Mountain Time calendar date
 
 async function loadGreenLight(){
+  if(!glMe()){ glMine = glTheirs = null; return; }
   const {data} = await supabaseClient.from("mood_checks").select("*").eq("day", glToday());
   glMine = (data||[]).find(r=>r.player_name===glMe()) || null;
   glTheirs = (data||[]).find(r=>r.player_name===glOther()) || null;
 }
 
 function renderGreenLight(){
+  const hasOwner = !!glMe();
+  document.getElementById("glPick").style.display = hasOwner ? "none" : "block";
+  document.getElementById("glForm").style.display = hasOwner ? "block" : "none";
+  if(!hasOwner) return;
   document.getElementById("glWho").textContent = `Answering as ${glMe()}`;
   const locked = glMine && !glEditing;
   if(!glEditing) glDraft = glMine ? {green:glMine.green, moods:[...(glMine.moods||[])]} : (glDraft.green===null ? {green:null, moods:[]} : glDraft);
 
-  document.querySelectorAll(".gl-light").forEach(b=>{
+  document.querySelectorAll(".gl-light:not(.gl-owner)").forEach(b=>{
     b.classList.toggle("sel", glDraft.green !== null && (b.dataset.g==="1") === glDraft.green);
     b.disabled = locked;
   });
@@ -972,7 +987,7 @@ function glMaybePopup(shared){
   document.getElementById("glOverlay").classList.add("show");
 }
 
-document.querySelectorAll(".gl-light").forEach(b=>b.addEventListener("click", ()=>{
+document.querySelectorAll(".gl-light:not(.gl-owner)").forEach(b=>b.addEventListener("click", ()=>{
   glDraft.green = b.dataset.g === "1";
   if(!glDraft.green) glDraft.moods = [];
   renderGreenLight();
@@ -989,7 +1004,6 @@ document.getElementById("glSaveBtn").addEventListener("click", async ()=>{
     updated_at: new Date().toISOString()
   }, {onConflict: "day,player_name"});
   if(error){ alert(error.message); btn.disabled = false; return; }
-  localStorage.setItem("glOwner", glMe());
   glEditing = false;
   await loadGreenLight();
   renderGreenLight();
@@ -998,9 +1012,15 @@ document.getElementById("glSaveBtn").addEventListener("click", async ()=>{
 document.getElementById("glResetOwnerBtn").addEventListener("click", ()=>{
   localStorage.removeItem("glOwner");
   const m = document.getElementById("glResetOwnerMsg");
-  m.textContent = "Reset. Green Light on this phone will use whoever is selected on the Draw tab.";
+  m.textContent = "Reset. The Green Light tab will ask whose phone this is next time.";
   m.className = "msg ok";
 });
+
+document.querySelectorAll(".gl-owner").forEach(b=>b.addEventListener("click", async ()=>{
+  localStorage.setItem("glOwner", b.dataset.p);
+  glEditing = false; glDraft = {green:null, moods:[]};
+  await refreshGreenLight();
+}));
 
 document.getElementById("glOverlayClose").addEventListener("click", ()=>{
   document.getElementById("glOverlay").classList.remove("show");
