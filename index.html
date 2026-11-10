@@ -279,6 +279,9 @@
   }
   .gl-status.match{border-color:#3fbf5a;background:linear-gradient(155deg,#16241a,var(--panel-2));color:var(--text);}
   .gl-status .big{font-size:1.25rem;font-weight:800;color:#3fbf5a;margin-bottom:6px;}
+  .gl-note{display:block;width:100%;box-sizing:border-box;margin:14px 0 0;padding:10px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--text);font-size:0.9rem;min-height:56px;font-family:inherit;resize:vertical;}
+  .gl-note-card{margin-top:12px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,0.05);text-align:left;font-size:0.9rem;}
+  .gl-note-card .who{font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
   .gl-chip{display:inline-block;margin:4px;padding:6px 12px;border-radius:999px;background:rgba(224,99,46,0.18);color:var(--ember);font-weight:700;font-size:0.85rem;}
   #glOverlay{
     position:fixed;inset:0;background:rgba(10,8,7,0.85);backdrop-filter:blur(6px);
@@ -349,6 +352,7 @@
       <div class="gl-title">What kind of mood? (pick any)</div>
       <div class="gl-moods" id="glMoods"></div>
     </div>
+    <textarea id="glNote" class="gl-note" maxlength="200" style="display:none;"></textarea>
     <button id="glSaveBtn" disabled>Lock it in</button>
     <div id="glStatus" class="gl-status" style="display:none;"></div>
     </div>
@@ -905,7 +909,7 @@ async function renderPrizeAdmin(){
 
 // ============ GREEN LIGHT ============
 const GL_MOODS = ["Soft and slow", "Hard and fast", "Vanilla", "Chocolate", "Strawberry"];
-let glDraft = {green:null, moods:[]};   // what's selected on screen
+let glDraft = {green:null, moods:[], note:""};   // what's selected on screen
 let glMine = null, glTheirs = null;     // saved rows for today
 let glEditing = false;
 
@@ -930,7 +934,14 @@ function renderGreenLight(){
   if(!hasOwner) return;
   document.getElementById("glWho").textContent = `Answering as ${glMe()}`;
   const locked = glMine && !glEditing;
-  if(!glEditing) glDraft = glMine ? {green:glMine.green, moods:[...(glMine.moods||[])]} : (glDraft.green===null ? {green:null, moods:[]} : glDraft);
+  if(!glEditing) glDraft = glMine ? {green:glMine.green, moods:[...(glMine.moods||[])], note:glMine.note||""} : (glDraft.green===null ? {green:null, moods:[], note:""} : glDraft);
+  if(glDraft.note === undefined) glDraft.note = "";
+
+  // Optional note — editable while answering, hidden once locked in
+  const noteBox = document.getElementById("glNote");
+  noteBox.placeholder = `Add a note for ${glOther()} (optional)`;
+  noteBox.style.display = (!locked && glDraft.green !== null) ? "block" : "none";
+  if(document.activeElement !== noteBox) noteBox.value = glDraft.note;
 
   document.querySelectorAll(".gl-light:not(.gl-owner)").forEach(b=>{
     b.classList.toggle("sel", glDraft.green !== null && (b.dataset.g==="1") === glDraft.green);
@@ -961,7 +972,7 @@ function renderGreenLight(){
   }
   st.style.display = "block";
   if(!glTheirs){
-    st.innerHTML = `You're locked in. Waiting on ${glOther()}…`;
+    st.innerHTML = `You're locked in. Waiting on ${glOther()}…` + glNoteCard("Your note", glMine.note);
     return;
   }
   if(glMine.green && glTheirs.green){
@@ -970,11 +981,18 @@ function renderGreenLight(){
     st.innerHTML = `<div class="big">💚 You matched on green!</div>` +
       (shared.length
         ? `<div style="margin-bottom:4px;">You both picked:</div>${shared.map(m=>`<span class="gl-chip">${m}</span>`).join("")}`
-        : `<div>No mood overlap today — time to negotiate 😏</div>`);
+        : `<div>No mood overlap today — time to negotiate 😏</div>`) +
+      glNoteCard(`${glOther()} says`, glTheirs.note);
     glMaybePopup(shared);
   } else {
-    st.innerHTML = `No match today. Try again tomorrow ❤️`;
+    st.innerHTML = `No match today. Try again tomorrow ❤️` + glNoteCard(`${glOther()} says`, glTheirs.note);
   }
+}
+
+function glEsc(t){ return String(t).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+function glNoteCard(label, note){
+  if(!note || !note.trim()) return "";
+  return `<div class="gl-note-card"><div class="who">${glEsc(label)}</div>${glEsc(note.trim()).replace(/\n/g,"<br>")}</div>`;
 }
 
 function glMaybePopup(shared){
@@ -984,6 +1002,7 @@ function glMaybePopup(shared){
   document.getElementById("glOverlayMoods").innerHTML = shared.length
     ? `You both picked:<br>${shared.map(m=>`<span class="gl-chip">${m}</span>`).join("")}`
     : "No mood overlap — time to negotiate 😏";
+  document.getElementById("glOverlayMoods").innerHTML += glNoteCard(`${glOther()} says`, glTheirs && glTheirs.note);
   document.getElementById("glOverlay").classList.add("show");
 }
 
@@ -1001,6 +1020,7 @@ document.getElementById("glSaveBtn").addEventListener("click", async ()=>{
   const {error} = await supabaseClient.from("mood_checks").upsert({
     day: glToday(), player_name: glMe(),
     green: glDraft.green, moods: glDraft.green ? glDraft.moods : [],
+    note: (document.getElementById("glNote").value || "").trim() || null,
     updated_at: new Date().toISOString()
   }, {onConflict: "day,player_name"});
   if(error){ alert(error.message); btn.disabled = false; return; }
@@ -1018,9 +1038,11 @@ document.getElementById("glResetOwnerBtn").addEventListener("click", ()=>{
 
 document.querySelectorAll(".gl-owner").forEach(b=>b.addEventListener("click", async ()=>{
   localStorage.setItem("glOwner", b.dataset.p);
-  glEditing = false; glDraft = {green:null, moods:[]};
+  glEditing = false; glDraft = {green:null, moods:[], note:""};
   await refreshGreenLight();
 }));
+
+document.getElementById("glNote").addEventListener("input", e=>{ glDraft.note = e.target.value; });
 
 document.getElementById("glOverlayClose").addEventListener("click", ()=>{
   document.getElementById("glOverlay").classList.remove("show");
@@ -1040,7 +1062,7 @@ function showView(v){
   if(v==="deck") renderCounts();
   if(v==="settings") renderPrizeAdmin();
   document.getElementById("playerBar").style.display = v==="light" ? "none" : "flex";
-  if(v==="light"){ glEditing = false; glDraft = {green:null, moods:[]}; refreshGreenLight(); }
+  if(v==="light"){ glEditing = false; glDraft = {green:null, moods:[], note:""}; refreshGreenLight(); }
 }
 document.querySelectorAll("nav button").forEach(b=>{
   b.addEventListener("click", ()=>showView(b.dataset.v));
@@ -1054,7 +1076,7 @@ document.querySelectorAll("#playerBar button").forEach(b=>{
     await loadPlayers();
     renderDraw();
     if(document.getElementById("view-light").classList.contains("active")){
-      glEditing = false; glDraft = {green:null, moods:[]};
+      glEditing = false; glDraft = {green:null, moods:[], note:""};
       refreshGreenLight();
     }
   });
