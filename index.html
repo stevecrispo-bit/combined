@@ -220,6 +220,9 @@
     border-radius:10px;
   }
   nav button.active{ color:var(--ember); background:rgba(224,99,46,0.1); }
+  nav button{ position:relative; }
+  nav button.gl-waiting::after{content:"";position:absolute;top:5px;right:calc(50% - 40px);width:9px;height:9px;border-radius:50%;background:#3fbf5a;box-shadow:0 0 0 2px rgba(20,16,15,0.95);}
+  #glNudge{display:none;margin:10px 16px 0;padding:10px 14px;border-radius:12px;border:1px solid #3fbf5a;background:linear-gradient(155deg,#16241a,var(--panel-2));color:var(--text);font-size:0.88rem;font-weight:600;text-align:center;cursor:pointer;}
 
   /* ---- admin ---- */
   .admin-section{
@@ -310,6 +313,7 @@
     <button data-p="Vi">Vi</button>
   </div>
 </header>
+<div id="glNudge"></div>
 
 <main>
 
@@ -1027,6 +1031,7 @@ document.getElementById("glSaveBtn").addEventListener("click", async ()=>{
   glEditing = false;
   await loadGreenLight();
   renderGreenLight();
+  glCheckWaiting();
 });
 
 document.getElementById("glResetOwnerBtn").addEventListener("click", ()=>{
@@ -1038,6 +1043,7 @@ document.getElementById("glResetOwnerBtn").addEventListener("click", ()=>{
 
 document.querySelectorAll(".gl-owner").forEach(b=>b.addEventListener("click", async ()=>{
   localStorage.setItem("glOwner", b.dataset.p);
+  glCheckWaiting();
   glEditing = false; glDraft = {green:null, moods:[], note:""};
   await refreshGreenLight();
 }));
@@ -1053,6 +1059,27 @@ async function refreshGreenLight(){
   renderGreenLight();
 }
 
+// ============ GREEN LIGHT NUDGE ============
+// When your partner has answered today and you haven't, show a dot on the
+// Green Light tab and a banner on the other tabs. Never reveals their answer.
+let glWaitingOnMe = false;
+async function glCheckWaiting(){
+  const me = glMe();
+  if(!me){ glWaitingOnMe = false; glUpdateNudge(); return; }
+  const {data} = await supabaseClient.from("mood_checks").select("player_name").eq("day", glToday());
+  const names = (data||[]).map(r=>r.player_name);
+  glWaitingOnMe = names.includes(glOther()) && !names.includes(me);
+  glUpdateNudge();
+}
+function glUpdateNudge(){
+  const onLight = document.getElementById("view-light").classList.contains("active");
+  document.querySelector('nav button[data-v="light"]').classList.toggle("gl-waiting", glWaitingOnMe);
+  const n = document.getElementById("glNudge");
+  n.textContent = `💚 ${glOther()} answered Green Light today. Your turn!`;
+  n.style.display = (glWaitingOnMe && !onLight) ? "block" : "none";
+}
+document.getElementById("glNudge").addEventListener("click", ()=>showView("light"));
+
 // ============ NAV ============
 function showView(v){
   document.querySelectorAll(".view").forEach(el=>el.classList.remove("active"));
@@ -1062,6 +1089,7 @@ function showView(v){
   if(v==="deck") renderCounts();
   if(v==="settings") renderPrizeAdmin();
   document.getElementById("playerBar").style.display = v==="light" ? "none" : "flex";
+  glUpdateNudge();
   if(v==="light"){ glEditing = false; glDraft = {green:null, moods:[], note:""}; refreshGreenLight(); }
 }
 document.querySelectorAll("nav button").forEach(b=>{
@@ -1262,7 +1290,10 @@ document.getElementById("resetWeekBtn").addEventListener("click", async ()=>{
 (async function init(){
   await loadPlayers();
   renderDraw();
+  glCheckWaiting();
+  document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) glCheckWaiting(); });
   setInterval(async ()=>{
+    glCheckWaiting();
     if(document.getElementById("view-draw").classList.contains("active")){
       await loadPlayers();
       renderDraw();
