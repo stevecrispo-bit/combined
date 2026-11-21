@@ -623,6 +623,16 @@ async function priorityTypesForPlayer(){
   return forced;
 }
 
+// Odds for each card type. Types already used up this week are skipped and the
+// rest are re-balanced, so these are relative weights, not fixed percentages.
+const TYPE_WEIGHTS = {dare:40, photo:40, hot_or_not:10, top5:10};
+function weightedPick(types){
+  const total = types.reduce((sum,t)=>sum+(TYPE_WEIGHTS[t]||0), 0);
+  let r = Math.random()*total;
+  for(const t of types){ r -= (TYPE_WEIGHTS[t]||0); if(r < 0) return t; }
+  return types[types.length-1];
+}
+
 async function drawCard(){
   document.getElementById("drawBtn").disabled = true;
   const counts = await weeklyTypeCounts(currentPlayer);
@@ -641,7 +651,7 @@ async function drawCard(){
   const forcedTypes = await priorityTypesForPlayer();
   const type = forcedTypes.length
     ? forcedTypes[Math.floor(Math.random()*forcedTypes.length)]
-    : candidates[Math.floor(Math.random()*candidates.length)];
+    : weightedPick(candidates);
   let text, points, cardId=null;
 
   if(type === "hot_or_not"){
