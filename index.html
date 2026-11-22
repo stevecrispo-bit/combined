@@ -291,6 +291,16 @@
     display:none;align-items:center;justify-content:center;z-index:50;padding:24px;
   }
   #glOverlay.show{display:flex;}
+  #weekOverlay{position:fixed;inset:0;background:rgba(10,8,7,0.85);backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:51;padding:24px;}
+  #weekOverlay.show{display:flex;}
+  #weekOverlay .box{max-width:340px;width:100%;text-align:center;padding:30px 22px;border-radius:20px;background:linear-gradient(155deg,#2a2112,var(--panel-2));border:2px solid var(--gold);box-shadow:0 0 60px -10px rgba(212,162,76,0.6);}
+  #weekOverlay .trophy{font-size:3.2rem;margin-bottom:8px;}
+  #weekOverlay .kicker{font-size:0.7rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;}
+  #weekOverlay h2{margin:0 0 6px;font-size:1.5rem;color:var(--gold);}
+  #weekOverlay .scores{color:var(--muted);font-size:0.9rem;margin-bottom:16px;}
+  #weekOverlay .prize{padding:12px;border-radius:12px;background:rgba(255,255,255,0.05);font-size:0.95rem;}
+  #weekOverlay .prize .label{font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--muted);margin-bottom:4px;}
+  #weekOverlay button{margin-top:20px;padding:12px 28px;border-radius:12px;border:none;background:var(--gold);color:#1a1408;font-weight:800;}
   #glOverlay .box{
     max-width:340px;width:100%;text-align:center;padding:30px 22px;border-radius:20px;
     background:linear-gradient(155deg,#16241a,var(--panel-2));border:2px solid #3fbf5a;
@@ -498,6 +508,17 @@
   <button data-v="deck" id="navDeck" style="display:none;">Deck</button>
   <button data-v="settings" id="navSettings" style="display:none;">Settings</button>
 </nav>
+
+<div id="weekOverlay">
+  <div class="box">
+    <div class="trophy">🏆</div>
+    <div class="kicker">Last week's results</div>
+    <h2 id="weekOverlayTitle"></h2>
+    <div class="scores" id="weekOverlayScores"></div>
+    <div class="prize"><div class="label">The prize</div><div id="weekOverlayPrize"></div></div>
+    <button id="weekOverlayClose">New week, let's go</button>
+  </div>
+</div>
 
 <div id="glOverlay">
   <div class="box">
@@ -785,6 +806,16 @@ async function resetWeekIfNeeded(){
   const {data} = await supabaseClient.from("week_state").select("*").eq("id",1).single();
   const ws = data || {};
   if(!ws.week_start || new Date(ws.week_start) < new Date(weekCutoffISO())){
+    // Save last week's result before wiping it, for the new-week splash.
+    // ignoreDuplicates: if both phones reset at once, the first save wins.
+    const {data: ps} = await supabaseClient.from("players").select("name,score");
+    const sc = n => ((ps||[]).find(p=>p.name===n)||{}).score || 0;
+    const steve = sc("Steve"), vi = sc("Vi");
+    await supabaseClient.from("week_results").upsert({
+      week_end: weekCutoffISO(), steve_score: steve, vi_score: vi,
+      winner: steve > vi ? "Steve" : vi > steve ? "Vi" : "Tie",
+      prize: ws.prize || null
+    }, {onConflict: "week_end", ignoreDuplicates: true});
     await supabaseClient.from("players").update({score:0}).eq("name","Steve");
     await supabaseClient.from("players").update({score:0}).eq("name","Vi");
     await supabaseClient.from("history").delete().neq("player_name","");
@@ -1296,10 +1327,32 @@ document.getElementById("resetWeekBtn").addEventListener("click", async ()=>{
   await loadPlayers();
 });
 
+// ============ NEW-WEEK SPLASH ============
+// Shows last week's winner and prize the first time each phone opens the app
+// in a new week.
+async function showWeekSplash(){
+  const weekEnd = weekCutoffISO();
+  const key = `weekSplash_${weekEnd}`;
+  if(localStorage.getItem(key)) return;
+  const {data} = await supabaseClient.from("week_results").select("*").eq("week_end", weekEnd).maybeSingle();
+  if(!data) return;
+  localStorage.setItem(key, "1");
+  const tie = data.winner === "Tie";
+  document.getElementById("weekOverlayTitle").textContent = tie ? "It's a tie!" : `${data.winner} won!`;
+  document.getElementById("weekOverlayScores").textContent = `Steve ${data.steve_score} · Vi ${data.vi_score}`;
+  document.getElementById("weekOverlayPrize").textContent = data.prize || "No prize was set last week";
+  document.getElementById("weekOverlay").classList.add("show");
+}
+document.getElementById("weekOverlayClose").addEventListener("click", ()=>{
+  document.getElementById("weekOverlay").classList.remove("show");
+});
+
 // ============ INIT ============
 (async function init(){
+  await resetWeekIfNeeded();
   await loadPlayers();
   renderDraw();
+  showWeekSplash();
   glCheckWaiting();
   document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) glCheckWaiting(); });
   setInterval(async ()=>{
